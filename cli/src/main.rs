@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bedrockci_lib;
+use bedrockci;
 use clap::{Arg, ArgAction, Command, command};
 
 mod commands;
@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
     #[cfg(target_os = "linux")]
     {
         // Check if running on Ubuntu
-        bedrockci_lib::check_ubuntu();
+        bedrockci::check_ubuntu();
     }
 
     let version_message = format_version_message();
