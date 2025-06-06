@@ -21,3 +21,11 @@ tokio = { version = "1.45.1", features = ["full"] }
 zip = "0.6.6"
 dirs = "5.0.1"
 colored = "3.0.0"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+incremental = false
