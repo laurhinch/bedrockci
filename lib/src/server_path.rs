@@ -14,5 +14,13 @@ pub fn get_server_path() -> Result<PathBuf, anyhow::Error> {
             home.join(".bedrockci/server")
         }
     };
+
+    if !server_path.exists() {
+        return Err(anyhow::anyhow!(
+            "Server directory does not exist at {}. Please run 'bedrockci download' first.",
+            server_path.display()
+        ));
+    }
+
     Ok(server_path)
 }
