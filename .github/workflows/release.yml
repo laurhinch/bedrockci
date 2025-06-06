@@ -1,53 +1,21 @@
-name: Release
+name: Release CLI
 
 on:
-  workflow_dispatch:
-
-env:
-  CARGO_TERM_COLOR: always
-  CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+  push:
+    tags:
+      - "cli-v*"
 
 jobs:
-  release:
+  build-release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
         with:
-          fetch-depth: 0
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+          toolchain: stable
+      - name: Build binary
+        run: cargo build --release --package bedrockci-cli
+      - name: Upload release
+        uses: softprops/action-gh-release@v2
         with:
-          components: rustfmt, clippy
-
-      - name: Install jq
-        run: sudo apt-get install -y jq
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build and test
-        run: |
-          cargo build --verbose
-          cargo test --verbose
-          cargo clippy -- -D warnings
-          cargo fmt -- --check
-
-      - name: Get library version
-        id: get_version
-        run: |
-          echo "version=$(cargo read-manifest --manifest-path lib/Cargo.toml | grep -o '"version":"[^"]*"' | sed 's/"version":"\([^"]*\)"/\1/')" >> $GITHUB_OUTPUT
-
-      - name: Publish library
-        run: |
-          cd lib
-          cargo publish --token $CRATES_IO_TOKEN
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          name: v${{ steps.get_version.outputs.version }}
-          tag_name: v${{ steps.get_version.outputs.version }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: target/release/bedrockci
