@@ -1,0 +1,22 @@
+[package]
+name = "bedrockci"
+version = "0.1.0"
+description = "CLI tool for validating Minecraft Bedrock resource and behavior packs against a real server instance"
+authors = ["Lauren 'Yharna' Hinchcliffe"]
+license = "MIT"
+repository = "https://github.com/laurhinch/bedrockci"
+readme = "README.md"
+edition = "2024"
+
+[[bin]]
+name = "bedrockci"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.98"
+atty = "0.2.14"
+bedrockci-lib = { path = "../lib" }
+clap = { version = "4.5.39", features = ["cargo"] }
+dirs = "5.0.1"
+tokio = { version = "1.45.1", features = ["full"] }
+colored = "2.1"
