@@ -1,5 +1,7 @@
 # BedrockCI
 
+[![CI](https://github.com/laurhinch/bedrockci/actions/workflows/rust.yml/badge.svg)](https://github.com/laurhinch/bedrockci/actions/workflows/rust.yml)
+
 BedrockCI validates Minecraft Bedrock resource and behavior packs against a real server instance. Built for CI pipelines.
 
 ## Features
