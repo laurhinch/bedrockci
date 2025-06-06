@@ -29,6 +29,10 @@ Download from [Releases](https://github.com/laurhinch/bedrockci/releases):
 bedrockci validate --rp /path/to/resource_pack --bp /path/to/behavior_pack
 ```
 
+## Usage
+
+Do NOT modify the downloaded servers in any way, as you might break some of the logic used to time validation.
+
 ## CLI Usage
 
 ```sh
