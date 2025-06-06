@@ -8,6 +8,7 @@ keywords = ["minecraft", "bedrock", "ci", "validation", "mcbe"]
 categories = ["development-tools", "command-line-utilities"]
 repository = "https://github.com/laurhinch/bedrockci"
 edition = "2024"
+readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.98"
