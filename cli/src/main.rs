@@ -20,7 +20,6 @@ async fn main() -> Result<()> {
         bedrockci_lib::check_ubuntu();
     }
 
-    let version = env!("CARGO_PKG_VERSION");
     let version_message = format_version_message();
     let matches = command!()
         .name("bedrockci")
@@ -137,7 +136,7 @@ async fn main() -> Result<()> {
             )
             .await?;
         }
-        Some(("list", sub_matches)) => {
+        Some(("list", _sub_matches)) => {
             commands::list_servers::handle_list_servers().await?;
         }
         _ => {

@@ -1,7 +1,6 @@
-use anyhow::{Context, Result};
 use futures::StreamExt;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use zip::ZipArchive;
 

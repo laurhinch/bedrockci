@@ -3,9 +3,7 @@ use bedrockci_lib::server::list_servers;
 use bedrockci_lib::server_path::get_server_path;
 use bedrockci_lib::validate::{ValidationResult, copy_test_packs, start_server};
 use colored::*;
-use std::path::{Path, PathBuf};
-use std::process::Child;
-use tokio::signal;
+use std::path::Path;
 
 pub async fn handle_validate(
     resource_pack: String,
@@ -36,7 +34,7 @@ pub async fn handle_validate(
     };
 
     // Get server path from environment or use the specified version
-    let server_path = get_server_path().join(&version);
+    let server_path = get_server_path()?.join(&version);
 
     if !server_path.exists() {
         anyhow::bail!(

@@ -1,14 +1,14 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, Command as TokioCommand};
+use tokio::process::Command as TokioCommand;
 use tokio::select;
-use tokio::time::{Timeout, sleep, timeout};
+use tokio::time::sleep;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ValidationError {

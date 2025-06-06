@@ -7,6 +7,8 @@ pub mod download;
 #[cfg(target_os = "linux")]
 pub mod server;
 #[cfg(target_os = "linux")]
+pub mod server_path;
+#[cfg(target_os = "linux")]
 pub mod validate;
 
 #[cfg(target_os = "linux")]
