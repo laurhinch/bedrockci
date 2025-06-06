@@ -1,6 +1,6 @@
 use anyhow::Result;
-use bedrockci_lib::download::server::{ServerDownloadError, download_server};
-use bedrockci_lib::server_path::get_server_path;
+use bedrockci::download::server::{ServerDownloadError, download_server};
+use bedrockci::server_path::get_server_path;
 
 pub async fn handle_download(
     version: Option<String>,

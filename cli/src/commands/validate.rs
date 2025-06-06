@@ -1,7 +1,7 @@
 use anyhow::Result;
-use bedrockci_lib::server::list_servers;
-use bedrockci_lib::server_path::get_server_path;
-use bedrockci_lib::validate::{ValidationResult, copy_test_packs, start_server};
+use bedrockci::server::list_servers;
+use bedrockci::server_path::get_server_path;
+use bedrockci::validate::{ValidationResult, copy_test_packs, start_server};
 use colored::*;
 use std::path::Path;
 
