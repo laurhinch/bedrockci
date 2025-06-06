@@ -34,7 +34,7 @@ pub async fn handle_validate(
     };
 
     // Get server path from environment or use the specified version
-    let server_path = get_server_path()?.join(&version);
+    let server_path = get_server_path(false)?.join(&version);
 
     if !server_path.exists() {
         anyhow::bail!(
