@@ -1,6 +1,6 @@
 [package]
 name = "bedrockci"
-version = "0.1.0"
+version = "1.0.0"
 description = "Core library for validating Minecraft Bedrock resource and behavior packs"
 authors = ["Lauren 'Yharna' Hinchcliffe"]
 license = "MIT"
@@ -8,6 +8,7 @@ keywords = ["minecraft", "bedrock", "ci", "validation", "mcbe"]
 categories = ["development-tools", "command-line-utilities"]
 repository = "https://github.com/laurhinch/bedrockci"
 edition = "2024"
+readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.98"

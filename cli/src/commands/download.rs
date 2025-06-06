@@ -7,7 +7,7 @@ pub async fn handle_download(
     accepted_eula_and_privacy_policy: bool,
     force_reinstall: bool,
 ) -> Result<()> {
-    let path = get_server_path()?;
+    let path = get_server_path(true)?;
     let version = version.unwrap_or_else(|| "1.21.84.1".to_string());
 
     match download_server(
