@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
                     Arg::new("version")
                         .long("version")
                         .short('v')
-                        .help("Specific version to download (e.g., \"1.21.84.1\")")
+                        .help("Specific version to download (e.g., \"1.21.84.1\"). If not specified, the latest version will be used.")
                         .value_parser(clap::value_parser!(String)),
                 )
                 .arg(
