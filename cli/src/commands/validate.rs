@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bedrockci::server::list_servers;
 use bedrockci::server_path::get_server_path;
-use bedrockci::validate::{ValidationResult, copy_test_packs, start_server};
+use bedrockci::validate::{start_server, symlink_test_packs, ValidationResult};
 use colored::*;
 use std::path::Path;
 
@@ -11,6 +11,7 @@ pub async fn handle_validate(
     only_warn: bool,
     fail_on_warn: bool,
     version: Option<String>,
+    last_log_timeout: Option<u64>,
 ) -> Result<()> {
     let resource_path = Path::new(&resource_pack);
     let behavior_path = Path::new(&behavior_pack);
@@ -43,14 +44,13 @@ pub async fn handle_validate(
         );
     }
 
-    println!("{}", "Using server version:".cyan().bold());
-    println!("  {}", version.green());
+    println!("{}", format!("Using server version: {}", version).cyan().bold());
 
-    println!("{}", "Copying test packs to server directory...".cyan());
-    copy_test_packs(&server_path, behavior_path, resource_path)?;
+    println!("{}", "Symlinking test packs to server directory...".cyan());
+    symlink_test_packs(&server_path, behavior_path, resource_path)?;
 
     println!("{}", "Starting server for validation...".cyan());
-    let validation_result = start_server(&server_path).await?;
+    let validation_result = start_server(&server_path, last_log_timeout).await?;
 
     handle_validation_results(&validation_result, only_warn, fail_on_warn)
 }
@@ -79,16 +79,20 @@ fn handle_validation_results(
     let errors = validation_result.errors.len();
     let warnings = validation_result.warnings.len();
 
+    // Always print a summary message
+    let summary = if errors == 0 && warnings == 0 {
+        "Validation completed successfully with no errors or warnings".green()
+    } else if only_warn {
+        format!("Validation completed with {} errors and {} warnings", errors, warnings).yellow()
+    } else if fail_on_warn {
+        format!("Validation completed with {} errors and {} warnings (fail on warn mode)", errors, warnings).yellow()
+    } else {
+        format!("Validation completed with {} errors and {} warnings", errors, warnings).yellow()
+    };
+    println!("\n{}", summary);
+
     if only_warn {
         // Most lenient: Treat errors as warnings
-        println!(
-            "\n{}",
-            format!(
-                "Validation  with {} errors and {} warnings",
-                errors, warnings
-            )
-            .yellow()
-        );
         Ok(())
     } else if fail_on_warn {
         // Strictest: Fail on both errors and warnings
@@ -99,7 +103,6 @@ fn handle_validation_results(
                 warnings
             ))
         } else {
-            println!("\n{}", "Validation completed successfully".green());
             Ok(())
         }
     } else {
@@ -107,7 +110,6 @@ fn handle_validation_results(
         if errors > 0 {
             Err(anyhow::anyhow!("Validation failed with {} errors", errors))
         } else {
-            println!("\n{}", "Validation completed successfully".green());
             Ok(())
         }
     }

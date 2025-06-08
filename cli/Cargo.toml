@@ -1,6 +1,6 @@
 [package]
 name = "bedrockci-cli"
-version = "1.0.0"
+version = "2.0.0"
 description = "CLI tool for validating Minecraft Bedrock resource and behavior packs against a real server instance"
 authors = ["Lauren 'Yharna' Hinchcliffe"]
 license = "MIT"
@@ -17,7 +17,7 @@ anyhow = "1.0.98"
 bedrockci = { path = "../lib" }
 clap = { version = "4.5.39", features = ["cargo"] }
 tokio = { version = "1.45.1", features = ["full"] }
-colored = "2.1"
+colored = "3.0.0"
 
 [profile.release]
 opt-level = 3

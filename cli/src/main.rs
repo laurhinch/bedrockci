@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
                     Arg::new("version")
                         .long("version")
                         .short('v')
-                        .help("Specific version to download (e.g., \"1.21.84.1\")")
+                        .help("Specific version to download (e.g., \"1.21.84.1\"). If not specified, the latest version will be used.")
                         .value_parser(clap::value_parser!(String)),
                 )
                 .arg(
@@ -100,6 +100,13 @@ async fn main() -> Result<()> {
                         .short('v')
                         .help("Specific server version to use for validation (e.g., \"1.21.84.1\"). If not specified, the latest version installed will be used.")
                         .value_parser(clap::value_parser!(String)),
+                )
+                .arg(
+                    Arg::new("last-log-timeout")
+                        .long("last-log-timeout")
+                        .short('t')
+                        .help("Timeout in seconds to wait after the last log message appears before wrapping up validation (default: 2)")
+                        .value_parser(clap::value_parser!(u64)),
                 ),
         )
         .get_matches();
@@ -127,12 +134,16 @@ async fn main() -> Result<()> {
             let version = sub_matches
                 .get_one::<String>("version")
                 .map(|s| s.to_string());
+            let last_log_timeout = sub_matches
+                .get_one::<u64>("last-log-timeout")
+                .map(|s| *s);
             commands::validate::handle_validate(
                 resource_pack,
                 behavior_pack,
                 only_warn,
                 fail_on_warn,
                 version,
+                last_log_timeout,
             )
             .await?;
         }

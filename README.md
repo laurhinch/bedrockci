@@ -42,8 +42,11 @@ Do NOT modify the downloaded servers in any way, as you might break some of the 
 ## CLI Usage
 
 ```sh
-# Download server (requires EULA acceptance)
+# Download specific version (requires EULA acceptance)
 bedrockci download --version 1.21.84.1 --accept-eula
+
+# Download the latest version (still requires EULA accept)
+bedrockci download --accept-eula
 
 # List installed server versions
 bedrockci list
@@ -58,6 +61,7 @@ Options for `validate` command:
 - `--version, -v`: Server version (default: latest installed)
 - `--only-warn`: Treat errors as warnings
 - `--fail-on-warn`: Fail CI on warnings and errors
+- `-t` or `--last-log-timeout`: Integer time in seconds since the last log message to consider validation complete (default: 2)
 
 ## Configuration
 

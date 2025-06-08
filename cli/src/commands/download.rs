@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bedrockci::download::server::{ServerDownloadError, download_server};
+use bedrockci::download::server::{ServerDownloadError, download_server, get_latest_version};
 use bedrockci::server_path::get_server_path;
 
 pub async fn handle_download(
@@ -8,7 +8,14 @@ pub async fn handle_download(
     force_reinstall: bool,
 ) -> Result<()> {
     let path = get_server_path(true)?;
-    let version = version.unwrap_or_else(|| "1.21.84.1".to_string());
+    let version = match version {
+        Some(v) => v,
+        None => {
+            let latest_version = get_latest_version().await?;
+            println!("No version specified, using latest version: {}", latest_version);
+            latest_version
+        }
+    };
 
     match download_server(
         &version,
@@ -25,6 +32,10 @@ pub async fn handle_download(
             );
             eprintln!("You must accept the EULA and Privacy Policy to download the server.");
             std::process::exit(1);
+        }
+        Err(ServerDownloadError::ServerAlreadyInstalled(v)) => {
+            println!("Server {} already installed, use --force-reinstall to download again", v);
+            std::process::exit(0);
         }
         Err(e) => {
             eprintln!("Error downloading server: {}", e);

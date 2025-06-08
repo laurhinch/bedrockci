@@ -133,7 +133,7 @@ fn create_world_pack_configs(
     Ok(())
 }
 
-/// Copies behavior and resource packs to the server directory, clearing any existing test packs first.
+/// Creates symlinks to behavior and resource packs in the server directory, removing any existing test packs first.
 ///
 /// # Arguments
 ///
@@ -143,9 +143,9 @@ fn create_world_pack_configs(
 ///
 /// # Returns
 ///
-/// * `Ok(())` - If the packs were copied successfully
-/// * `Err(ValidationError)` - If there was an error copying the packs
-pub fn copy_test_packs(
+/// * `Ok(())` - If the symlinks were created successfully
+/// * `Err(ValidationError)` - If there was an error creating the symlinks
+pub fn symlink_test_packs(
     server_path: &Path,
     bp_path: &Path,
     rp_path: &Path,
@@ -175,19 +175,25 @@ pub fn copy_test_packs(
     let bp_dir = server_path.join("behavior_packs").join(TESTING_BP_NAME);
     let rp_dir = server_path.join("resource_packs").join(TESTING_RP_NAME);
 
-    // Clear existing test packs
-    if bp_dir.exists() {
-        fs::remove_dir_all(&bp_dir).map_err(|e| {
-            ValidationError::PackCopyFailed(format!("Failed to remove existing BP: {}", e))
-        })?;
-    }
-    if rp_dir.exists() {
-        fs::remove_dir_all(&rp_dir).map_err(|e| {
-            ValidationError::PackCopyFailed(format!("Failed to remove existing RP: {}", e))
-        })?;
-    }
+    let cleanup_path = |path: &Path| -> Result<(), ValidationError> {
+        match fs::metadata(path) {
+            Ok(_) => {
+                if let Err(_) = fs::remove_file(path) {
+                    fs::remove_dir_all(path).map_err(|e| {
+                        ValidationError::PackCopyFailed(format!("Failed to remove existing path: {}", e))
+                    })?;
+                }
+            }
+            Err(_) => {}
+        }
+        
+        Ok(())
+    };
 
-    // Copy new packs
+    cleanup_path(&bp_dir)?;
+    cleanup_path(&rp_dir)?;
+
+    // Create parent directories if they don't exist
     fs::create_dir_all(bp_dir.parent().unwrap()).map_err(|e| {
         ValidationError::PackCopyFailed(format!("Failed to create BP directory: {}", e))
     })?;
@@ -195,37 +201,24 @@ pub fn copy_test_packs(
         ValidationError::PackCopyFailed(format!("Failed to create RP directory: {}", e))
     })?;
 
-    copy_dir(bp_path, &bp_dir)?;
-    copy_dir(rp_path, &rp_dir)?;
+    // Create symlinks using absolute paths to avoid any relative path issues
+    let bp_abs = fs::canonicalize(bp_path).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to get absolute BP path: {}", e))
+    })?;
+    let rp_abs = fs::canonicalize(rp_path).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to get absolute RP path: {}", e))
+    })?;
+
+    std::os::unix::fs::symlink(&bp_abs, &bp_dir).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to create BP symlink: {}", e))
+    })?;
+
+    std::os::unix::fs::symlink(&rp_abs, &rp_dir).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to create RP symlink: {}", e))
+    })?;
 
     // Create world pack configurations
     create_world_pack_configs(server_path, bp_header, rp_header)?;
-
-    Ok(())
-}
-
-fn copy_dir(src: &Path, dst: &Path) -> Result<(), ValidationError> {
-    fs::create_dir_all(dst).map_err(|e| {
-        ValidationError::PackCopyFailed(format!("Failed to create destination directory: {}", e))
-    })?;
-
-    for entry in fs::read_dir(src).map_err(|e| {
-        ValidationError::PackCopyFailed(format!("Failed to read source directory: {}", e))
-    })? {
-        let entry = entry.map_err(|e| {
-            ValidationError::PackCopyFailed(format!("Failed to read directory entry: {}", e))
-        })?;
-        let path = entry.path();
-        let target = dst.join(path.file_name().unwrap());
-
-        if path.is_dir() {
-            copy_dir(&path, &target)?;
-        } else {
-            fs::copy(&path, &target).map_err(|e| {
-                ValidationError::PackCopyFailed(format!("Failed to copy file: {}", e))
-            })?;
-        }
-    }
 
     Ok(())
 }
@@ -240,7 +233,7 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<(), ValidationError> {
 ///
 /// * `Ok(ValidationResult)` - The validation results from the server output
 /// * `Err(ValidationError)` - If there was an error starting or monitoring the server
-pub async fn start_server(server_path: &Path) -> Result<ValidationResult, ValidationError> {
+pub async fn start_server(server_path: &Path, last_log_timeout: Option<u64>) -> Result<ValidationResult, ValidationError> {
     if !server_path.exists() || !server_path.is_dir() {
         return Err(ValidationError::InvalidServerPath(
             "Server path does not exist or is not a directory".to_string(),
@@ -292,10 +285,11 @@ pub async fn start_server(server_path: &Path) -> Result<ValidationResult, Valida
     let mut last_log_time = Instant::now();
     let mut telemetry_seen = false;
     let mut server_started = false;
+    let mut telemetry_complete = false;
 
     loop {
-        let timeout_future = if telemetry_seen {
-            Box::pin(sleep(Duration::from_secs(5)))
+        let timeout_future = if telemetry_complete {
+            Box::pin(sleep(Duration::from_secs(last_log_timeout.unwrap_or(2))))
         } else {
             Box::pin(sleep(Duration::from_secs(0)))
         };
@@ -304,18 +298,18 @@ pub async fn start_server(server_path: &Path) -> Result<ValidationResult, Valida
             Ok(Some(line)) = stdout_reader.next_line() => {
                 let line = line.trim();
                 if !line.is_empty() {
-                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started)?;
+                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started, &mut telemetry_complete)?;
                 }
             }
             Ok(Some(line)) = stderr_reader.next_line() => {
                 let line = line.trim();
                 if !line.is_empty() {
-                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started)?;
+                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started, &mut telemetry_complete)?;
                 }
             }
             _ = timeout_future => {
-                if telemetry_seen {
-                    println!("{}", "\nNo new logs for 5 seconds, stopping server...".yellow());
+                if telemetry_complete {
+                    println!("{}", format!("\nNo new logs for {} seconds, validation complete.", last_log_timeout.unwrap_or(2)).yellow());
                     break;
                 }
             }
@@ -342,11 +336,13 @@ fn process_line(
     last_log_time: &mut Instant,
     telemetry_seen: &mut bool,
     server_started: &mut bool,
+    telemetry_complete: &mut bool,
 ) -> Result<(), ValidationError> {
     // Check if server has started
     if line.contains("Server started.") {
         *server_started = true;
         println!("{}", "Server has started successfully".green());
+        return Ok(());
     }
 
     // Check if we've seen the telemetry message
@@ -357,8 +353,16 @@ fn process_line(
         return Ok(());
     }
 
-    // Only process logs after telemetry message
-    if !*telemetry_seen {
+    // Skip all logs between telemetry message and separator
+    if *telemetry_seen && line.contains("======================================================") {
+        *telemetry_seen = false;
+        *telemetry_complete = true;
+        *last_log_time = Instant::now();
+        return Ok(());
+    }
+
+    // Skip all logs before telemetry block is complete
+    if !*server_started || *telemetry_seen {
         return Ok(());
     }
 
@@ -370,13 +374,11 @@ fn process_line(
     // Categorize and print the log message
     if line.contains("ERROR") {
         validation_result.errors.push(line.to_string());
-        println!("{}", line.red());
     } else if line.contains("WARN") {
         validation_result.warnings.push(line.to_string());
-        println!("{}", line.yellow());
     } else if line.contains("INFO") {
         validation_result.info.push(line.to_string());
-        println!("{}", line.blue());
+        println!("{}", format!("{}", line).blue());
     }
 
     Ok(())
