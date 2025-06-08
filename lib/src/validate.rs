@@ -133,103 +133,6 @@ fn create_world_pack_configs(
     Ok(())
 }
 
-/// Copies behavior and resource packs to the server directory, clearing any existing test packs first.
-///
-/// # Arguments
-///
-/// * `server_path` - Path to the server directory
-/// * `bp_path` - Path to the behavior pack
-/// * `rp_path` - Path to the resource pack
-///
-/// # Returns
-///
-/// * `Ok(())` - If the packs were copied successfully
-/// * `Err(ValidationError)` - If there was an error copying the packs
-pub fn copy_test_packs(
-    server_path: &Path,
-    bp_path: &Path,
-    rp_path: &Path,
-) -> Result<(), ValidationError> {
-    // Validate paths
-    if !server_path.exists() || !server_path.is_dir() {
-        return Err(ValidationError::InvalidServerPath(
-            "Server path does not exist or is not a directory".to_string(),
-        ));
-    }
-    if !bp_path.exists() || !bp_path.is_dir() {
-        return Err(ValidationError::InvalidPackPath(
-            "Behavior pack path does not exist or is not a directory".to_string(),
-        ));
-    }
-    if !rp_path.exists() || !rp_path.is_dir() {
-        return Err(ValidationError::InvalidPackPath(
-            "Resource pack path does not exist or is not a directory".to_string(),
-        ));
-    }
-
-    // Read pack manifests
-    let bp_header = read_pack_manifest(bp_path)?;
-    let rp_header = read_pack_manifest(rp_path)?;
-
-    // Setup pack directories
-    let bp_dir = server_path.join("behavior_packs").join(TESTING_BP_NAME);
-    let rp_dir = server_path.join("resource_packs").join(TESTING_RP_NAME);
-
-    // Clear existing test packs
-    if bp_dir.exists() {
-        fs::remove_dir_all(&bp_dir).map_err(|e| {
-            ValidationError::PackCopyFailed(format!("Failed to remove existing BP: {}", e))
-        })?;
-    }
-    if rp_dir.exists() {
-        fs::remove_dir_all(&rp_dir).map_err(|e| {
-            ValidationError::PackCopyFailed(format!("Failed to remove existing RP: {}", e))
-        })?;
-    }
-
-    // Copy new packs
-    fs::create_dir_all(bp_dir.parent().unwrap()).map_err(|e| {
-        ValidationError::PackCopyFailed(format!("Failed to create BP directory: {}", e))
-    })?;
-    fs::create_dir_all(rp_dir.parent().unwrap()).map_err(|e| {
-        ValidationError::PackCopyFailed(format!("Failed to create RP directory: {}", e))
-    })?;
-
-    copy_dir(bp_path, &bp_dir)?;
-    copy_dir(rp_path, &rp_dir)?;
-
-    // Create world pack configurations
-    create_world_pack_configs(server_path, bp_header, rp_header)?;
-
-    Ok(())
-}
-
-fn copy_dir(src: &Path, dst: &Path) -> Result<(), ValidationError> {
-    fs::create_dir_all(dst).map_err(|e| {
-        ValidationError::PackCopyFailed(format!("Failed to create destination directory: {}", e))
-    })?;
-
-    for entry in fs::read_dir(src).map_err(|e| {
-        ValidationError::PackCopyFailed(format!("Failed to read source directory: {}", e))
-    })? {
-        let entry = entry.map_err(|e| {
-            ValidationError::PackCopyFailed(format!("Failed to read directory entry: {}", e))
-        })?;
-        let path = entry.path();
-        let target = dst.join(path.file_name().unwrap());
-
-        if path.is_dir() {
-            copy_dir(&path, &target)?;
-        } else {
-            fs::copy(&path, &target).map_err(|e| {
-                ValidationError::PackCopyFailed(format!("Failed to copy file: {}", e))
-            })?;
-        }
-    }
-
-    Ok(())
-}
-
 /// Creates symlinks to behavior and resource packs in the server directory, removing any existing test packs first.
 ///
 /// # Arguments
@@ -275,7 +178,7 @@ pub fn symlink_test_packs(
     let cleanup_path = |path: &Path| -> Result<(), ValidationError> {
         match fs::metadata(path) {
             Ok(_) => {
-                if let Err(e) = fs::remove_file(path) {
+                if let Err(_) = fs::remove_file(path) {
                     fs::remove_dir_all(path).map_err(|e| {
                         ValidationError::PackCopyFailed(format!("Failed to remove existing path: {}", e))
                     })?;
@@ -330,7 +233,7 @@ pub fn symlink_test_packs(
 ///
 /// * `Ok(ValidationResult)` - The validation results from the server output
 /// * `Err(ValidationError)` - If there was an error starting or monitoring the server
-pub async fn start_server(server_path: &Path) -> Result<ValidationResult, ValidationError> {
+pub async fn start_server(server_path: &Path, last_log_timeout: Option<u64>) -> Result<ValidationResult, ValidationError> {
     if !server_path.exists() || !server_path.is_dir() {
         return Err(ValidationError::InvalidServerPath(
             "Server path does not exist or is not a directory".to_string(),
@@ -386,7 +289,7 @@ pub async fn start_server(server_path: &Path) -> Result<ValidationResult, Valida
 
     loop {
         let timeout_future = if telemetry_complete {
-            Box::pin(sleep(Duration::from_secs(5)))
+            Box::pin(sleep(Duration::from_secs(last_log_timeout.unwrap_or(2))))
         } else {
             Box::pin(sleep(Duration::from_secs(0)))
         };
@@ -406,7 +309,7 @@ pub async fn start_server(server_path: &Path) -> Result<ValidationResult, Valida
             }
             _ = timeout_future => {
                 if telemetry_complete {
-                    println!("{}", "\nNo new logs for 5 seconds, stopping server...".yellow());
+                    println!("{}", format!("\nNo new logs for {} seconds, validation complete.", last_log_timeout.unwrap_or(2)).yellow());
                     break;
                 }
             }
