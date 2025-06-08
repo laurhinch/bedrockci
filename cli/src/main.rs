@@ -107,6 +107,13 @@ async fn main() -> Result<()> {
                         .short('t')
                         .help("Timeout in seconds to wait after the last log message appears before wrapping up validation (default: 2)")
                         .value_parser(clap::value_parser!(u64)),
+                )
+                .arg(
+                    Arg::new("verbose")
+                        .long("verbose")
+                        .short('l')
+                        .help("Verbose output, print all output from the validation server")
+                        .action(ArgAction::SetTrue),
                 ),
         )
         .get_matches();
@@ -137,6 +144,7 @@ async fn main() -> Result<()> {
             let last_log_timeout = sub_matches
                 .get_one::<u64>("last-log-timeout")
                 .map(|s| *s);
+            let verbose = sub_matches.get_flag("verbose");
             commands::validate::handle_validate(
                 resource_pack,
                 behavior_pack,
@@ -144,6 +152,7 @@ async fn main() -> Result<()> {
                 fail_on_warn,
                 version,
                 last_log_timeout,
+                verbose,
             )
             .await?;
         }

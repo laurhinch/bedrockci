@@ -62,6 +62,7 @@ Options for `validate` command:
 - `--only-warn`: Treat errors as warnings
 - `--fail-on-warn`: Fail CI on warnings and errors
 - `-t` or `--last-log-timeout`: Integer time in seconds since the last log message to consider validation complete (default: 2)
+- `-l` or `--verbose`: Print all output from the validation server
 
 ## Configuration
 
