@@ -11,6 +11,7 @@ pub async fn handle_validate(
     only_warn: bool,
     fail_on_warn: bool,
     version: Option<String>,
+    last_log_timeout: Option<u64>,
 ) -> Result<()> {
     let resource_path = Path::new(&resource_pack);
     let behavior_path = Path::new(&behavior_pack);
@@ -49,7 +50,7 @@ pub async fn handle_validate(
     symlink_test_packs(&server_path, behavior_path, resource_path)?;
 
     println!("{}", "Starting server for validation...".cyan());
-    let validation_result = start_server(&server_path).await?;
+    let validation_result = start_server(&server_path, last_log_timeout).await?;
 
     handle_validation_results(&validation_result, only_warn, fail_on_warn)
 }

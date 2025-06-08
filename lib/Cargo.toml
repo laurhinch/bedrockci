@@ -1,6 +1,6 @@
 [package]
 name = "bedrockci"
-version = "1.1.0"
+version = "2.0.0"
 description = "Core library for validating Minecraft Bedrock resource and behavior packs"
 authors = ["Lauren 'Yharna' Hinchcliffe"]
 license = "MIT"
