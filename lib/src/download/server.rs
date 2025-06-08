@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use zip::ZipArchive;
+use regex::Regex;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerDownloadError {
@@ -161,4 +162,41 @@ fn get_download_url(version: &str) -> String {
         "https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-{}.zip",
         version
     )
+}
+
+/// Gets the latest version of the Bedrock Dedicated Server by parsing the Minecraft download page.
+///
+/// # Returns
+///
+/// * `Ok(String)` - The latest version string if successful
+/// * `Err(ServerDownloadError)` - If the version could not be retrieved
+pub async fn get_latest_version() -> Result<String, ServerDownloadError> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.33 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.33")
+        .build()
+        .map_err(|e| ServerDownloadError::DownloadFailed(format!("Failed to create HTTP client: {}", e)))?;
+
+    let response = client
+        .get("https://minecraft.net/en-us/download/server/bedrock/")
+        .header("Accept-Encoding", "identity")
+        .header("Accept-Language", "en")
+        .send()
+        .await
+        .map_err(|e| ServerDownloadError::DownloadFailed(format!("Failed to fetch download page: {}", e)))?;
+
+    let html = response
+        .text()
+        .await
+        .map_err(|e| ServerDownloadError::DownloadFailed(format!("Failed to read response: {}", e)))?;
+
+    let re = Regex::new(r"https://www\.minecraft\.net/bedrockdedicatedserver/bin-linux/bedrock-server-([\d\.]+)\.zip")
+        .map_err(|e| ServerDownloadError::DownloadFailed(format!("Failed to create regex: {}", e)))?;
+
+    if let Some(captures) = re.captures(&html) {
+        if let Some(version) = captures.get(1) {
+            return Ok(version.as_str().to_string());
+        }
+    }
+
+    Err(ServerDownloadError::DownloadFailed("Could not find version in download page".to_string()))
 }
