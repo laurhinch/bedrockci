@@ -292,9 +292,10 @@ pub async fn start_server(server_path: &Path) -> Result<ValidationResult, Valida
     let mut last_log_time = Instant::now();
     let mut telemetry_seen = false;
     let mut server_started = false;
+    let mut telemetry_complete = false;
 
     loop {
-        let timeout_future = if telemetry_seen {
+        let timeout_future = if telemetry_complete {
             Box::pin(sleep(Duration::from_secs(5)))
         } else {
             Box::pin(sleep(Duration::from_secs(0)))
@@ -304,17 +305,17 @@ pub async fn start_server(server_path: &Path) -> Result<ValidationResult, Valida
             Ok(Some(line)) = stdout_reader.next_line() => {
                 let line = line.trim();
                 if !line.is_empty() {
-                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started)?;
+                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started, &mut telemetry_complete)?;
                 }
             }
             Ok(Some(line)) = stderr_reader.next_line() => {
                 let line = line.trim();
                 if !line.is_empty() {
-                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started)?;
+                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started, &mut telemetry_complete)?;
                 }
             }
             _ = timeout_future => {
-                if telemetry_seen {
+                if telemetry_complete {
                     println!("{}", "\nNo new logs for 5 seconds, stopping server...".yellow());
                     break;
                 }
@@ -342,11 +343,13 @@ fn process_line(
     last_log_time: &mut Instant,
     telemetry_seen: &mut bool,
     server_started: &mut bool,
+    telemetry_complete: &mut bool,
 ) -> Result<(), ValidationError> {
     // Check if server has started
     if line.contains("Server started.") {
         *server_started = true;
         println!("{}", "Server has started successfully".green());
+        return Ok(());
     }
 
     // Check if we've seen the telemetry message
@@ -357,8 +360,16 @@ fn process_line(
         return Ok(());
     }
 
-    // Only process logs after telemetry message
-    if !*telemetry_seen {
+    // Skip all logs between telemetry message and separator
+    if *telemetry_seen && line.contains("======================================================") {
+        *telemetry_seen = false;
+        *telemetry_complete = true;
+        *last_log_time = Instant::now();
+        return Ok(());
+    }
+
+    // Skip all logs before telemetry block is complete
+    if !*server_started || *telemetry_seen {
         return Ok(());
     }
 
@@ -370,13 +381,11 @@ fn process_line(
     // Categorize and print the log message
     if line.contains("ERROR") {
         validation_result.errors.push(line.to_string());
-        println!("{}", line.red());
     } else if line.contains("WARN") {
         validation_result.warnings.push(line.to_string());
-        println!("{}", line.yellow());
     } else if line.contains("INFO") {
         validation_result.info.push(line.to_string());
-        println!("{}", line.blue());
+        println!("{}", format!("{}", line).blue());
     }
 
     Ok(())
