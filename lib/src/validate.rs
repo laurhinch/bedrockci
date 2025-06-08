@@ -230,6 +230,96 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<(), ValidationError> {
     Ok(())
 }
 
+/// Creates symlinks to behavior and resource packs in the server directory, removing any existing test packs first.
+///
+/// # Arguments
+///
+/// * `server_path` - Path to the server directory
+/// * `bp_path` - Path to the behavior pack
+/// * `rp_path` - Path to the resource pack
+///
+/// # Returns
+///
+/// * `Ok(())` - If the symlinks were created successfully
+/// * `Err(ValidationError)` - If there was an error creating the symlinks
+pub fn symlink_test_packs(
+    server_path: &Path,
+    bp_path: &Path,
+    rp_path: &Path,
+) -> Result<(), ValidationError> {
+    // Validate paths
+    if !server_path.exists() || !server_path.is_dir() {
+        return Err(ValidationError::InvalidServerPath(
+            "Server path does not exist or is not a directory".to_string(),
+        ));
+    }
+    if !bp_path.exists() || !bp_path.is_dir() {
+        return Err(ValidationError::InvalidPackPath(
+            "Behavior pack path does not exist or is not a directory".to_string(),
+        ));
+    }
+    if !rp_path.exists() || !rp_path.is_dir() {
+        return Err(ValidationError::InvalidPackPath(
+            "Resource pack path does not exist or is not a directory".to_string(),
+        ));
+    }
+
+    // Read pack manifests
+    let bp_header = read_pack_manifest(bp_path)?;
+    let rp_header = read_pack_manifest(rp_path)?;
+
+    // Setup pack directories
+    let bp_dir = server_path.join("behavior_packs").join(TESTING_BP_NAME);
+    let rp_dir = server_path.join("resource_packs").join(TESTING_RP_NAME);
+
+    let cleanup_path = |path: &Path| -> Result<(), ValidationError> {
+        match fs::metadata(path) {
+            Ok(_) => {
+                if let Err(e) = fs::remove_file(path) {
+                    fs::remove_dir_all(path).map_err(|e| {
+                        ValidationError::PackCopyFailed(format!("Failed to remove existing path: {}", e))
+                    })?;
+                }
+            }
+            Err(_) => {}
+        }
+        
+        Ok(())
+    };
+
+    cleanup_path(&bp_dir)?;
+    cleanup_path(&rp_dir)?;
+
+    // Create parent directories if they don't exist
+    fs::create_dir_all(bp_dir.parent().unwrap()).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to create BP directory: {}", e))
+    })?;
+    fs::create_dir_all(rp_dir.parent().unwrap()).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to create RP directory: {}", e))
+    })?;
+
+    // Create symlinks using absolute paths to avoid any relative path issues
+    let bp_abs = fs::canonicalize(bp_path).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to get absolute BP path: {}", e))
+    })?;
+    let rp_abs = fs::canonicalize(rp_path).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to get absolute RP path: {}", e))
+    })?;
+
+    std::os::unix::fs::symlink(&bp_abs, &bp_dir).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to create BP symlink: {}", e))
+    })?;
+
+    std::os::unix::fs::symlink(&rp_abs, &rp_dir).map_err(|e| {
+        ValidationError::PackCopyFailed(format!("Failed to create RP symlink: {}", e))
+    })?;
+
+    // Create world pack configurations
+    create_world_pack_configs(server_path, bp_header, rp_header)?;
+
+    Ok(())
+}
+
 /// Starts the Bedrock server from the specified directory and monitors its output.
 ///
 /// # Arguments
