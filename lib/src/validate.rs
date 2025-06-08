@@ -233,7 +233,7 @@ pub fn symlink_test_packs(
 ///
 /// * `Ok(ValidationResult)` - The validation results from the server output
 /// * `Err(ValidationError)` - If there was an error starting or monitoring the server
-pub async fn start_server(server_path: &Path, last_log_timeout: Option<u64>) -> Result<ValidationResult, ValidationError> {
+pub async fn start_server(server_path: &Path, last_log_timeout: Option<u64>, verbose: bool) -> Result<ValidationResult, ValidationError> {
     if !server_path.exists() || !server_path.is_dir() {
         return Err(ValidationError::InvalidServerPath(
             "Server path does not exist or is not a directory".to_string(),
@@ -298,13 +298,13 @@ pub async fn start_server(server_path: &Path, last_log_timeout: Option<u64>) -> 
             Ok(Some(line)) = stdout_reader.next_line() => {
                 let line = line.trim();
                 if !line.is_empty() {
-                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started, &mut telemetry_complete)?;
+                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started, &mut telemetry_complete, verbose)?;
                 }
             }
             Ok(Some(line)) = stderr_reader.next_line() => {
                 let line = line.trim();
                 if !line.is_empty() {
-                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started, &mut telemetry_complete)?;
+                    process_line(line, &mut validation_result, &mut last_log_time, &mut telemetry_seen, &mut server_started, &mut telemetry_complete, verbose)?;
                 }
             }
             _ = timeout_future => {
@@ -337,7 +337,13 @@ fn process_line(
     telemetry_seen: &mut bool,
     server_started: &mut bool,
     telemetry_complete: &mut bool,
+    verbose: bool,
 ) -> Result<(), ValidationError> {
+
+    if verbose {
+        println!("{}", format!("{}", line).dimmed());
+    }
+
     // Check if server has started
     if line.contains("Server started.") {
         *server_started = true;
@@ -378,7 +384,10 @@ fn process_line(
         validation_result.warnings.push(line.to_string());
     } else if line.contains("INFO") {
         validation_result.info.push(line.to_string());
-        println!("{}", format!("{}", line).blue());
+        // On verbose, we already printed this line
+        if !verbose {
+            println!("{}", format!("{}", line).blue());
+        }
     }
 
     Ok(())
