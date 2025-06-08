@@ -60,42 +60,88 @@ fn handle_validation_results(
     only_warn: bool,
     fail_on_warn: bool,
 ) -> Result<()> {
-    println!("{}", "Validation Results:".cyan().bold());
+    println!("\n{}", "=== Validation Results ===".cyan().bold());
 
     if !validation_result.errors.is_empty() {
         println!("\n{}", "Errors:".red().bold());
+        
+        // Group errors by category
+        let mut grouped_errors: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
         for error in &validation_result.errors {
-            println!("  {}", error.red());
+            let parts: Vec<&str> = error.splitn(3, ']').collect();
+            if parts.len() >= 2 {
+                let category = parts[1].trim().trim_start_matches('[').trim_end_matches(']');
+                let message = parts[2].trim();
+                grouped_errors
+                    .entry(category.to_string())
+                    .or_default()
+                    .push(message.to_string());
+            } else {
+                grouped_errors
+                    .entry("Other".to_string())
+                    .or_default()
+                    .push(error.to_string());
+            }
+        }
+
+        // Print grouped errors
+        for (category, errors) in grouped_errors {
+            println!("  [{}]:", category.red());
+            for error in errors {
+                println!("    {}", error.red());
+            }
         }
     }
 
     if !validation_result.warnings.is_empty() {
         println!("\n{}", "Warnings:".yellow().bold());
+        
+        // Group warnings by category
+        let mut grouped_warnings: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
         for warning in &validation_result.warnings {
-            println!("  {}", warning.yellow());
+            let parts: Vec<&str> = warning.splitn(3, ']').collect();
+            if parts.len() >= 2 {
+                let category = parts[1].trim().trim_start_matches('[').trim_end_matches(']');
+                let message = parts[2].trim();
+                grouped_warnings
+                    .entry(category.to_string())
+                    .or_default()
+                    .push(message.to_string());
+            } else {
+                grouped_warnings
+                    .entry("Other".to_string())
+                    .or_default()
+                    .push(warning.to_string());
+            }
+        }
+
+        // Print grouped warnings
+        for (category, warnings) in grouped_warnings {
+            println!("  [{}]:", category.yellow());
+            for warning in warnings {
+                println!("    {}", warning.yellow());
+            }
         }
     }
 
     let errors = validation_result.errors.len();
     let warnings = validation_result.warnings.len();
 
-    // Always print a summary message
+    println!("\n{}", "=== Summary ===".cyan().bold());
     let summary = if errors == 0 && warnings == 0 {
-        "Validation completed successfully with no errors or warnings".green()
+        "✓ Validation completed successfully with no errors or warnings".green()
     } else if only_warn {
-        format!("Validation completed with {} errors and {} warnings", errors, warnings).yellow()
+        format!("⚠ Validation completed with {} errors and {} warnings", errors, warnings).yellow()
     } else if fail_on_warn {
-        format!("Validation completed with {} errors and {} warnings (fail on warn mode)", errors, warnings).yellow()
+        format!("⚠ Validation completed with {} errors and {} warnings (fail on warn mode)", errors, warnings).yellow()
     } else {
-        format!("Validation completed with {} errors and {} warnings", errors, warnings).yellow()
+        format!("⚠ Validation completed with {} errors and {} warnings", errors, warnings).yellow()
     };
-    println!("\n{}", summary);
+    println!("{}", summary);
 
     if only_warn {
-        // Most lenient: Treat errors as warnings
         Ok(())
     } else if fail_on_warn {
-        // Strictest: Fail on both errors and warnings
         if errors > 0 || warnings > 0 {
             Err(anyhow::anyhow!(
                 "Validation failed with {} errors and {} warnings (fail on warn mode)",
@@ -106,7 +152,6 @@ fn handle_validation_results(
             Ok(())
         }
     } else {
-        // Normal: Fail on errors only
         if errors > 0 {
             Err(anyhow::anyhow!("Validation failed with {} errors", errors))
         } else {
