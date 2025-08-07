@@ -116,6 +116,41 @@ async fn main() -> Result<()> {
                         .action(ArgAction::SetTrue),
                 ),
         )
+        // Run command
+        .subcommand(
+            Command::new("run")
+                .display_name("Run")
+                .about("Run server with resource and behavior packs")
+                .long_about("Runs a Minecraft Bedrock server with the specified resource and behavior packs for testing")
+                .arg(
+                    Arg::new("resource-pack")
+                        .long("rp")
+                        .help("Path to the resource pack")
+                        .value_parser(clap::value_parser!(String))
+                        .required(true),
+                )
+                .arg(
+                    Arg::new("behavior-pack")
+                        .long("bp")
+                        .help("Path to the behavior pack")
+                        .value_parser(clap::value_parser!(String))
+                        .required(true),
+                )
+                .arg(
+                    Arg::new("version")
+                        .long("version")
+                        .short('v')
+                        .help("Specific server version to use (e.g., \"1.21.84.1\"). If not specified, the latest version installed will be used.")
+                        .value_parser(clap::value_parser!(String)),
+                )
+                .arg(
+                    Arg::new("verbose")
+                        .long("verbose")
+                        .short('l')
+                        .help("Verbose output, print all output from the server")
+                        .action(ArgAction::SetTrue),
+                ),
+        )
         .get_matches();
 
     match matches.subcommand() {
@@ -141,9 +176,7 @@ async fn main() -> Result<()> {
             let version = sub_matches
                 .get_one::<String>("version")
                 .map(|s| s.to_string());
-            let last_log_timeout = sub_matches
-                .get_one::<u64>("last-log-timeout")
-                .map(|s| *s);
+            let last_log_timeout = sub_matches.get_one::<u64>("last-log-timeout").map(|s| *s);
             let verbose = sub_matches.get_flag("verbose");
             commands::validate::handle_validate(
                 resource_pack,
@@ -158,6 +191,21 @@ async fn main() -> Result<()> {
         }
         Some(("list", _sub_matches)) => {
             commands::list_servers::handle_list_servers().await?;
+        }
+        Some(("run", sub_matches)) => {
+            let resource_pack = sub_matches
+                .get_one::<String>("resource-pack")
+                .unwrap()
+                .to_string();
+            let behavior_pack = sub_matches
+                .get_one::<String>("behavior-pack")
+                .unwrap()
+                .to_string();
+            let version = sub_matches
+                .get_one::<String>("version")
+                .map(|s| s.to_string());
+            let verbose = sub_matches.get_flag("verbose");
+            commands::run::handle_run(resource_pack, behavior_pack, version, verbose).await?;
         }
         _ => {
             println!("Please specify a valid subcommand. Use --help for more information.");

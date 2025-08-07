@@ -1,9 +1,10 @@
 use futures::StreamExt;
+use headless_chrome::{Browser, LaunchOptions};
+use regex::Regex;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use zip::ZipArchive;
-use regex::Regex;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerDownloadError {
@@ -171,32 +172,136 @@ fn get_download_url(version: &str) -> String {
 /// * `Ok(String)` - The latest version string if successful
 /// * `Err(ServerDownloadError)` - If the version could not be retrieved
 pub async fn get_latest_version() -> Result<String, ServerDownloadError> {
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.33 (KHTML, like Gecko) Chrome/90.0.0.0 Safari/537.33")
-        .build()
-        .map_err(|e| ServerDownloadError::DownloadFailed(format!("Failed to create HTTP client: {}", e)))?;
+    println!("Launching headless browser...");
 
-    let response = client
-        .get("https://minecraft.net/en-us/download/server/bedrock/")
-        .header("Accept-Encoding", "identity")
-        .header("Accept-Language", "en")
-        .send()
-        .await
-        .map_err(|e| ServerDownloadError::DownloadFailed(format!("Failed to fetch download page: {}", e)))?;
+    // Launch headless Chrome with options to handle HTTP/2 issues
+    let launch_options = LaunchOptions {
+        headless: true,
+        args: vec![
+            std::ffi::OsStr::new("--disable-http2"),
+            std::ffi::OsStr::new(
+                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            ),
+            std::ffi::OsStr::new("--disable-blink-features=AutomationControlled"),
+            std::ffi::OsStr::new("--no-sandbox"),
+            std::ffi::OsStr::new("--disable-dev-shm-usage"),
+        ],
+        ..Default::default()
+    };
 
-    let html = response
-        .text()
-        .await
-        .map_err(|e| ServerDownloadError::DownloadFailed(format!("Failed to read response: {}", e)))?;
+    let browser = Browser::new(launch_options).map_err(|e| {
+        ServerDownloadError::DownloadFailed(format!("Failed to launch browser: {}", e))
+    })?;
 
-    let re = Regex::new(r"https://www\.minecraft\.net/bedrockdedicatedserver/bin-linux/bedrock-server-([\d\.]+)\.zip")
-        .map_err(|e| ServerDownloadError::DownloadFailed(format!("Failed to create regex: {}", e)))?;
+    // Navigate to the download page
+    let tab = browser.new_tab().map_err(|e| {
+        ServerDownloadError::DownloadFailed(format!("Failed to create new tab: {}", e))
+    })?;
 
-    if let Some(captures) = re.captures(&html) {
-        if let Some(version) = captures.get(1) {
-            return Ok(version.as_str().to_string());
+    tab.navigate_to("https://minecraft.net/en-us/download/server/bedrock/")
+        .map_err(|e| {
+            ServerDownloadError::DownloadFailed(format!("Failed to navigate to page: {}", e))
+        })?;
+
+    // Wait for the page to load and JavaScript to execute
+    println!("Waiting for page to load...");
+    std::thread::sleep(std::time::Duration::from_secs(5));
+
+    // Try to find the download button/link for Linux server
+    let result = tab
+        .evaluate(
+            r#"
+            // Find all links with href containing bedrock-server
+            const links = Array.from(document.querySelectorAll('a[href*="bedrock-server"]'));
+            const linuxLink = links.find(link => link.href.includes('bin-linux'));
+            if (linuxLink) {
+                linuxLink.href;
+            } else {
+                // Try to find by aria-label
+                const button = document.querySelector('a[aria-label="serverBedrockLinux"]');
+                button ? button.href : null;
+            }
+            "#,
+            false,
+        )
+        .map_err(|e| {
+            ServerDownloadError::DownloadFailed(format!("Failed to evaluate JavaScript: {}", e))
+        })?;
+
+    if let Some(url) = result.value {
+        if let Some(url_str) = url.as_str() {
+            println!("Found download URL: {}", url_str);
+
+            // Extract version from URL
+            let version_re = Regex::new(r"bedrock-server-(\d+\.\d+\.\d+\.\d+)\.zip").unwrap();
+            if let Some(captures) = version_re.captures(url_str) {
+                if let Some(version) = captures.get(1) {
+                    println!("Extracted version: {}", version.as_str());
+                    return Ok(version.as_str().to_string());
+                }
+            }
         }
     }
 
-    Err(ServerDownloadError::DownloadFailed("Could not find version in download page".to_string()))
+    // If direct link search didn't work, try to get the page content after JS execution
+    let html = tab.get_content().map_err(|e| {
+        ServerDownloadError::DownloadFailed(format!("Failed to get page content: {}", e))
+    })?;
+
+    println!("Searching rendered HTML for version...");
+
+    // Search for version in the rendered HTML
+    let patterns = [
+        r"bedrock-server-(\d+\.\d+\.\d+\.\d+)\.zip",
+        r#"bedrockdedicatedserver/bin-linux/bedrock-server-(\d+\.\d+\.\d+\.\d+)"#,
+    ];
+
+    for pattern in patterns {
+        let re = Regex::new(pattern).unwrap();
+        if let Some(captures) = re.captures(&html) {
+            if let Some(version) = captures.get(1) {
+                println!("Found version: {}", version.as_str());
+                return Ok(version.as_str().to_string());
+            }
+        }
+    }
+
+    Err(ServerDownloadError::DownloadFailed(
+        "Could not find version in download page".to_string(),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_latest_version() {
+        let result = get_latest_version().await;
+
+        match result {
+            Ok(version) => {
+                assert!(!version.is_empty(), "Version should not be empty");
+
+                // Verify version format (e.g., "1.21.100.7")
+                let version_parts: Vec<&str> = version.split('.').collect();
+                assert!(
+                    version_parts.len() >= 3,
+                    "Version should have at least 3 parts separated by dots"
+                );
+
+                for part in version_parts {
+                    assert!(
+                        part.chars().all(char::is_numeric),
+                        "Each version part should be numeric"
+                    );
+                }
+
+                println!("Latest version: {}", version);
+            }
+            Err(e) => {
+                panic!("Failed to get latest version: {}", e);
+            }
+        }
+    }
 }
